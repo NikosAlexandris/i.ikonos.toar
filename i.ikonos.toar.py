@@ -3,30 +3,84 @@
 @author: Nikos Alexandris | Created on Sat Nov  8 00:05:17 2014
 """
 
+#%Module
+#%  description: Converting IKONOS digital numbers (radiometrically corrected) to Top-of-Atmosphere Spectral Radiance or Reflectance  (Krause, 2005)
+#%  keywords: imagery, radiometric conversion, radiance, reflectance, IKONOS
+#%End
+
+#%flag
+#%  key: r
+#%  description: Convert to at-sensor spectral radiance
+#%end
+
+#%option
+#% key: band
+#% type: string
+#% gisprompt: old,double,raster
+#% description: IKONOS acquired spectral band(s)
+#% required : yes
+#%end
+
+#%option
+#% key: outputprefix
+#% type: string
+#% gisprompt: old,double,raster
+#% description: Prefix for the Pan-Sharpened Multi-Spectral image(s)
+#% required: yes
+#% answer: hpf
+#%end
+
+
+#%option
+#% key: utc
+#% type: string
+#% description: Coordinated Universal Time
+#% guisection: Acquisition Metadata
+#% required: no
+#%end
+
+#%option
+#% key: doy
+#% type: ???
+#% description: Aquisition's Day of Year
+#% options: 1-365
+#% guisection: Acquisition Metadata
+#% required: no
+#%end
+
+#%option
+#% key: sea
+#% type: double
+#% description: Aquisition's Sun Elevation Angle
+#% options: 0.0 - 90.0
+#% guisection: Acquisition Metadata
+#% required: no
+#%end
+
+
 # librairies
+import os
 import math
 import grass.script as grass
 from grass.pygrass.modules.shortcuts import general as g
 
 
-# Constants
-
 # Band Parameters # Table extracted using Okular! # -------------------------
 
-# IKONOS Band (λ)								1st column
-# CalCoef λ Pre 2/22/01* (DN/(mW/cm2-sr))		2nd column
-# CalCoef λ  Post 2/22/01* (DN/(mW/cm2-sr))	3rd column
-# Bandwidthλ (nm)								4th column
-# Esunλ (W/m2/μm)								5th column
+# IKONOS Band (λ)                           1st column
+# CalCoef(λ) Pre  2/22/01* (DN/(mW/cm2-sr)) 2nd column
+# CalCoef(λ) Post 2/22/01* (DN/(mW/cm2-sr)) 3rd column
+# Effective Bandwidthλ (nm)                 4th column
+# Esun(λ) (W/m2/μm)                         5th column
 
-# Band	 CCPre	 CCPost BW		Esun # Note: Pan is (TDI-13) ### ------------|
-CC = {'Pan':   (161, 161, 403.0, 1375.8),
+CC = {'Pan':   (161, 161, 403.0, 1375.8),  # Note: Pan is "TDI-13"
       'Blue':  (633, 728, 071.3, 1930.9),
       'Green': (649, 727, 088.6, 1854.8),
       'Red':   (840, 949, 065.8, 1556.5),
       'NIR':   (746, 843, 095.4, 1156.9)}
 
 # MetaData
+
 # Day of Year for the image under processing is "166"
 DOY = 166 # HardCoded ! ------------------------------------------------<<<
 ESD = 1.0157675 # HardCoded ! ------------------------------------------<<<
@@ -62,7 +116,20 @@ def run(cmd, **kwargs):
     grass.run_command(cmd, quiet=True, **kwargs)
 
 
+#def dn_to_rad(dn, bw, cc):
+#    """Converting DN to Spectral Radiance. Required inputs:
+#    - dn: Digital Numbers (raster map)
+#    - bw: Effective Bandwidth
+#    - cc: Calibration Coefficient"""
+#    rad = "%s = 10**4 * %s / %f * %f" % (rad, dn, cc, bw)
+#    grass.mapcalc(rad)
+
+    
 def main():
+    
+    """1st, get input, output, options and flags"""
+    
+    
     # loop over all bands
     for band in spectral_bands:
 
@@ -81,8 +148,7 @@ def main():
         
 
         # conversion to Radiance --------------------------------------------
-        """
-        Spectral Radiance for spectral band λ at the sensor’s aperture
+        """Spectral Radiance for spectral band λ at the sensor’s aperture
         in: watts / (meter squared * ster * µm)
 
         L_λ = 10^4 • DN_λ / CalCoef_λ • Bandwidth_λ    (1)
@@ -121,8 +187,7 @@ def main():
             history=cmd_history)
 
         # conversion to ToAR ------------------------------------------------
-        """
-        Calculate Planetary Reflectance:
+        """Calculate Planetary Reflectance:
 
         ρ_p = π • L_λ • d^2 / ESUN_λ • cos(θ_S)
 
