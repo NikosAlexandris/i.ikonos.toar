@@ -16,10 +16,10 @@
 #%end
 
 #%option G_OPT_R_INPUTS
-#% key: dn
-#% key_desc: dn band name
+#% key: band
+#% key_desc: band name
 #% type: string
-#% description: IKONOS acquired spectral bands (DN values).
+#% description: IKONOS acquired spectral band(s) (DN values).
 #% multiple: yes
 #% required: yes
 #%end
@@ -75,6 +75,7 @@ import math
 from utc_to_esd import AcquisitionTime, jd_to_esd
 
 # globals -------------------------------------------------------------------
+acq_tim = ''
 tmp = ''
 tmp_rad = ''
 tmp_toar = ''
@@ -121,9 +122,11 @@ def run(cmd, **kwargs):
 
 
 def main():
+    
+    global acq_time, esd
     """1st, get input, output, options and flags"""
 
-    spectral_bands = options['dn'].split(',')
+    spectral_bands = options['band'].split(',')
     outputsuffix = options['outputsuffix']
     utc = options['utc']
     doy = options['doy']
@@ -151,7 +154,10 @@ def main():
 
     if utc:
         acq_tim = AcquisitionTime(utc)  # will hold esd (earth-sun distance)
-    elif not doy:
+        esd = acq_tim.esd  # Earth-Sun distance
+    elif doy:
+        esd = jd_to_esd(int(doy))
+    else:
         grass.fatal(_("Either the UTC string or "
                       "the Day-of-Year (doy) are required!"))
 
@@ -160,6 +166,7 @@ def main():
 
     # loop over all bands
     for band in spectral_bands:
+        global tmp_rad
 
         g.message("Processing the %s spectral band" % band)
 
@@ -210,7 +217,7 @@ def main():
         if not radiance:
             global tmp_toar
             """Calculate Planetary Reflectance:
-            ρ_p = π • L_λ • d^2 / ESUN_λ • cos(θ_S)
+            ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))
             - ρ: Unitless Planetary Reflectance [To be calculated]
             - π: Mathematical constant
             - L_λ: Spectral Radiance from equation (1)
@@ -218,16 +225,8 @@ def main():
             AcquisitionTime class]
             """
             msg = "Conversion to Top-of-Atmosphere Reflectance: "
-            "ρ(p) = π • L(λ) • d^2 / ESUN(λ) • cos(θ(S))"
+            "ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))"
             g.message(msg)
-
-            if acq_tim:
-                esd = acq_tim.esd  # Earth-Sun distance
-            elif doy:
-                esd = jd_to_esd(doy)
-            else:
-                break
-            
 
             esun = CC[band][3]  # Mean solar exoatmospheric irradiance
             msg = "Parameters: Earth-Sun distane=%f, Mean Band Irradiance=%f" \
@@ -260,7 +259,7 @@ def main():
 
         # add suffix to basename & rename end product
 #        msx_nam = ("%s.%s" % (msx.split('@')[0], outputsuffix))
-        run("g.rename", rast=(tmp_ref, "Ref"))
+        run("g.rename", rast=(tmp_toar, "Ref"))
 
     elif tmp_rad:
         run("r.support", map=tmp_rad,
