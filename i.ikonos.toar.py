@@ -54,6 +54,7 @@
 
 #%option
 #% key: sea
+#% key_desc: angle (degrees)
 #% type: double
 #% description: Aquisition's Sun Elevation Angle
 #% options: 0.0 - 90.0
@@ -64,11 +65,19 @@
 
 # librairies
 import os
-import math
+import sys
+import atexit
+
 import grass.script as grass
 from grass.pygrass.modules.shortcuts import general as g
-from grass.pygrass.raster.abstract import Info
-from utc_to_esd import AcquisitionTime
+#from grass.pygrass.raster.abstract import Info
+import math
+from utc_to_esd import AcquisitionTime, jd_to_esd
+
+# globals -------------------------------------------------------------------
+tmp = ''
+tmp_rad = ''
+tmp_toar = ''
 
 # constants
 
@@ -116,42 +125,49 @@ def main():
 
     spectral_bands = options['dn'].split(',')
     outputsuffix = options['outputsuffix']
-    utc = options['utc']    
+    utc = options['utc']
     doy = options['doy']
     sea = options['sea']
+    radiance = flags['r']
 
     mapset = grass.gisenv()['MAPSET']  # Current Mapset?
 
     imglst = [spectral_bands]
-    images = {}
-    for img in imglst:  # Retrieving Image Info
-        images[img] = Info(img, mapset)
-        images[img].read()
+#    images = {}
+#    for img in imglst:  # Retrieving Image Info
+#        images[img] = Info(img, mapset)
+#        images[img].read()
 
     grass.use_temp_region()  # to safely modify the region
+
+    # ========================================== Temporary files ========
+    tmpfile = grass.tempfile()  # Temporary file - replace with os.getpid?
+    tmp = "tmp." + grass.basename(tmpfile)  # use its basenam
+    # Temporary files ===================================================
 
     # -----------------------------------------------------------------------
     # Required Metadata
     # -----------------------------------------------------------------------
 
-    # =======================================================================
-    #    sza = 90 - sea
-    #    BAND_Esun = CC[band][3]
-    #    msg = "Using Esun=%" % esun
-    # =======================================================================
+    if utc:
+        acq_tim = AcquisitionTime(utc)  # will hold esd (earth-sun distance)
+    elif not doy:
+        grass.fatal(_("Either the UTC string or "
+                      "the Day-of-Year (doy) are required!"))
+
+    # Sun Zenith Angle based on Sun Elevation Angle
+    sza = 90 - float(sea)
 
     # loop over all bands
     for band in spectral_bands:
 
         g.message("Processing the %s spectral band" % band)
 
-        # set region
-#        g.message("|  Matching region to %s" % dn)
-        run('g.region', rast=band, flags='p')   # ## FixMe
+        g.message("|  Matching region to %s" % band)  # set region
+        run('g.region', rast=band)   # ## FixMe
 
-        # set band parameters as variables
-        cc = CC[band][1]
-        bw = CC[band][2]
+        cc = float(CC[band][1])  # calibration coefficient
+        bw = float(CC[band][2])  # effective bandwidth
         msg = "Band Parameters: Calibration Coefficient=%f, Bandwidth=%f" \
             % (cc, bw)
         g.message(msg)
@@ -177,57 +193,99 @@ def main():
         (W·sr−1·m−2)"
         """
 
-        msg = "Conversion to Radiance: "
-        "L(λ) = 10^4 • DN(λ) / CalCoef(λ) • Bandwidth(λ)"
-        g.message(msg)
+#        msg = "Conversion to Radiance: " \
+#            "L(λ) = 10^4 x DN(λ) / CalCoef(λ) x Bandwidth(λ)"
+#        g.message(msg)
 
-        rad = "%s = 10**4 * %s / %f * %f" % (rad, dn, cc, bw)
+        tmp_rad = "%s.Radiance" % tmp  # Spectral Radiance
+
+        rad = "%s = 10^4 * %s / %f * %f" \
+            % (tmp_rad, band, cc, bw)
         grass.mapcalc(rad)
 
-        # add info
-        cmd_history = rad
 
-        run("r.support", map=band_rad,
+        history_rad = rad  # track command
+
+        # conversion to ToAR ------------------------------------------------
+        if not radiance:
+            global tmp_toar
+            """Calculate Planetary Reflectance:
+            ρ_p = π • L_λ • d^2 / ESUN_λ • cos(θ_S)
+            - ρ: Unitless Planetary Reflectance [To be calculated]
+            - π: Mathematical constant
+            - L_λ: Spectral Radiance from equation (1)
+            - d: Earth-Sun distance in astronomical units [calculated using
+            AcquisitionTime class]
+            """
+            msg = "Conversion to Top-of-Atmosphere Reflectance: "
+            "ρ(p) = π • L(λ) • d^2 / ESUN(λ) • cos(θ(S))"
+            g.message(msg)
+
+            if acq_tim:
+                esd = acq_tim.esd  # Earth-Sun distance
+            elif doy:
+                esd = jd_to_esd(doy)
+            else:
+                break
+            
+
+            esun = CC[band][3]  # Mean solar exoatmospheric irradiance
+            msg = "Parameters: Earth-Sun distane=%f, Mean Band Irradiance=%f" \
+                % (esd, esun)
+            g.message(msg)
+
+            tmp_toar = "%s.Reflectance" % tmp  # Spectral Reflectance
+            toar = "%s = %f * %s * %f^2 / %f * cos(%f)" \
+                % (tmp_toar, math.pi, tmp_rad, esd, esun, sza)
+            grass.mapcalc(toar)
+
+            history_toar = toar  # track command
+
+            # add some metadata
+            title = "echo ${BAND} band (Top of Atmosphere Reflectance)"
+            units = "Unitless planetary reflectance"
+            description = "Top of Atmosphere `echo ${BAND}` band spectral "
+            "Reflectance (unitless)"
+            source1 = '"IKONOS Planetary Reflectance and Mean Solar '
+            'Exoatmospheric Irradiance", by Martin Taylor, Geoeye'
+            source2 = "USGS via Digital Globe"
+            history_toar += "ESD=%f; BAND_Esun=%f; SZA=%f" % (esd, esun, sza)
+
+#            history_ref = "%s, %s, %s, %s, %s, %s" % \
+#                (title, units, description, source1, source2, toar_history)
+
+    if tmp_toar:
+        # history entry
+#        run("r.support", map=tmp_ref, history_ref)
+
+        # add suffix to basename & rename end product
+#        msx_nam = ("%s.%s" % (msx.split('@')[0], outputsuffix))
+        run("g.rename", rast=(tmp_ref, "Ref"))
+
+    elif tmp_rad:
+        run("r.support", map=tmp_rad,
             units="W / m2 / μm / ster",
-            description="At-sensor %s band spectral Radiance (W/m2/μm/sr)" \
+            description="At-sensor %s band spectral Radiance (W/m2/μm/sr)"
             % band,
             source1='"IKONOS Planetary Reflectance and '
             'Mean Solar Exoatmospheric Irradiance", by Martin Taylor, Geoeye',
-            history=cmd_history)
+            history=history_rad)
 
-        # conversion to ToAR ------------------------------------------------
-        """Calculate Planetary Reflectance:
+#        # history entry
+#        run("r.support", map=tmp_rad, history)
 
-        ρ_p = π • L_λ • d^2 / ESUN_λ • cos(θ_S)
+        # add suffix to basename & rename end product
+#        msx_nam = ("%s.%s" % (msx.split('@')[0], outputsuffix))
+        run("g.rename", rast=(tmp_rad, "Rad"))
 
-        ρ: Unitless Planetary Reflectance
-       To be calculated
+    # visualising-related information
+    grass.del_temp_region()  # restoring previous region settings
+    g.message("\n|! Region's resolution restored!")
+    g.message("\n>>> Rebalancing colors "
+              "(i.colors.enhance) may improve appearance of RGB composites!",
+              flags='i')
 
-        π: mathematical constant
-        L_λ: from equation (1)
-
-        d: Earth-Sun distance in astronomical units, interpolated value
-        from <http://landsathandbook.gsfc.nasa.gov/excel_docs/d.xls>
-        """
-
-        msg = "Conversion to Top-of-Atmosphere Reflectance: "
-        "ρ(p) = π • L(λ) • d^2 / ESUN(λ) • cos(θ(S))"
-        g.message(msg)
-
-        toar = "%s = math.pi * rad * %f**2 / %f * cos(%f)" \
-            % (toar, band_rad, esd, esun, sza)
-
-        # add some metadata
-        run('r.support',
-            map=band_toar,
-            title="echo ${BAND} band (Top of Atmosphere Reflectance)",
-            units="Unitless planetary reflectance",
-            description="Top of Atmosphere `echo ${BAND}` band spectral "
-            "Reflectance (unitless)",
-            source1='"IKONOS Planetary Reflectance and Mean Solar '
-            'Exoatmospheric Irradiance", by Martin Taylor, Geoeye',
-            source2="USGS via Digital Globe",
-            history="ESD=%f; BAND_Esun=%f; SZA=%f" % (esd, esun, sza))
-
-if __name__ == '__main__':
+if __name__ == "__main__":
+    options, flags = grass.parser()
+    atexit.register(cleanup)
     sys.exit(main())
