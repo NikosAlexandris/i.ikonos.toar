@@ -1,4 +1,6 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 """
 @author: Nikos Alexandris | Created on Sat Nov  8 00:05:17 2014
 """
@@ -13,38 +15,40 @@
 #%  description: Convert to at-sensor spectral radiance
 #%end
 
-#%option
-#% key: band
+#%option G_OPT_R_INPUTS
+#% key: dn
+#% key_desc: dn band name
 #% type: string
-#% gisprompt: old,double,raster
-#% description: IKONOS acquired spectral band(s)
-#% required : yes
-#%end
-
-#%option
-#% key: outputprefix
-#% type: string
-#% gisprompt: old,double,raster
-#% description: Prefix for the Pan-Sharpened Multi-Spectral image(s)
+#% description: IKONOS acquired spectral bands (DN values).
+#% multiple: yes
 #% required: yes
-#% answer: hpf
 #%end
 
+#%option G_OPT_R_BASENAME_OUTPUT
+#% key: outputsuffix
+#% key_desc: suffix string
+#% type: string
+#% label: 
+#% description: Suffix for spectral radiance or reflectance output image(s)
+#% required: yes
+#% answer: toar
+#%end
 
 #%option
 #% key: utc
+#% key_desc: YYYY_MM_DDThh:mm:ss:ddddddZ;
 #% type: string
 #% description: Coordinated Universal Time
-#% guisection: Acquisition Metadata
+#% guisection: Metadata
 #% required: no
 #%end
 
 #%option
 #% key: doy
-#% type: ???
+#% type: integer
 #% description: Aquisition's Day of Year
 #% options: 1-365
-#% guisection: Acquisition Metadata
+#% guisection: Metadata
 #% required: no
 #%end
 
@@ -53,7 +57,7 @@
 #% type: double
 #% description: Aquisition's Sun Elevation Angle
 #% options: 0.0 - 90.0
-#% guisection: Acquisition Metadata
+#% guisection: Metadata
 #% required: no
 #%end
 
@@ -63,15 +67,20 @@ import os
 import math
 import grass.script as grass
 from grass.pygrass.modules.shortcuts import general as g
+from grass.pygrass.raster.abstract import Info
+from utc_to_esd import AcquisitionTime
 
+# constants
 
-# Band Parameters # Table extracted using Okular! # -------------------------
+"""
+Band Parameters (Taylor, 2005)
 
 # IKONOS Band (λ)                           1st column
 # CalCoef(λ) Pre  2/22/01* (DN/(mW/cm2-sr)) 2nd column
 # CalCoef(λ) Post 2/22/01* (DN/(mW/cm2-sr)) 3rd column
 # Effective Bandwidthλ (nm)                 4th column
 # Esun(λ) (W/m2/μm)                         5th column
+"""
 
 CC = {'Pan':   (161, 161, 403.0, 1375.8),  # Note: Pan is "TDI-13"
       'Blue':  (633, 728, 071.3, 1930.9),
@@ -79,30 +88,7 @@ CC = {'Pan':   (161, 161, 403.0, 1375.8),  # Note: Pan is "TDI-13"
       'Red':   (840, 949, 065.8, 1556.5),
       'NIR':   (746, 843, 095.4, 1156.9)}
 
-# MetaData
-
-# Day of Year for the image under processing is "166"
-DOY = 166 # HardCoded ! ------------------------------------------------<<<
-ESD = 1.0157675 # HardCoded ! ------------------------------------------<<<
-
-# Esun: 		Mean solar exoatmospheric irradiance(s) (W/m2/μm), interpolated
-# pre-defined (above)
-
-# cos(θ_s):	cosine of Solar Zenith Angle, where:
-# θ_s  or  SZA is the Solar Zenith Angle
-# SEA is the Solar Elevation Angle, retrieved from the image's metadata
-SEA = 52.78880
-SZA = 90 - SEA
-BAND_Esun = CC[band][3]
-msg = "Using Esun=%" % esun
-
-
-      
-# Bands
-spectral_bands = "Pan Blue Green Red NIR"
-msg = "Spectral bands to be processed: "
-"%s -- Change this msg!" % spectral_bands
-g.message(msg)
+spectral_bands = CC.keys()
 
 
 # helper functions ----------------------------------------------------------
@@ -124,28 +110,51 @@ def run(cmd, **kwargs):
 #    rad = "%s = 10**4 * %s / %f * %f" % (rad, dn, cc, bw)
 #    grass.mapcalc(rad)
 
-    
+
 def main():
-    
     """1st, get input, output, options and flags"""
-    
-    
+
+    spectral_bands = options['dn'].split(',')
+    outputsuffix = options['outputsuffix']
+    utc = options['utc']    
+    doy = options['doy']
+    sea = options['sea']
+
+    mapset = grass.gisenv()['MAPSET']  # Current Mapset?
+
+    imglst = [spectral_bands]
+    images = {}
+    for img in imglst:  # Retrieving Image Info
+        images[img] = Info(img, mapset)
+        images[img].read()
+
+    grass.use_temp_region()  # to safely modify the region
+
+    # -----------------------------------------------------------------------
+    # Required Metadata
+    # -----------------------------------------------------------------------
+
+    # =======================================================================
+    #    sza = 90 - sea
+    #    BAND_Esun = CC[band][3]
+    #    msg = "Using Esun=%" % esun
+    # =======================================================================
+
     # loop over all bands
     for band in spectral_bands:
 
         g.message("Processing the %s spectral band" % band)
 
         # set region
-        run('g.region', rast=band)   ### FixMe
-        # echo something?
-        
+#        g.message("|  Matching region to %s" % dn)
+        run('g.region', rast=band, flags='p')   # ## FixMe
+
         # set band parameters as variables
         cc = CC[band][1]
         bw = CC[band][2]
         msg = "Band Parameters: Calibration Coefficient=%f, Bandwidth=%f" \
-        % (cc, bw)
+            % (cc, bw)
         g.message(msg)
-        
 
         # conversion to Radiance --------------------------------------------
         """Spectral Radiance for spectral band λ at the sensor’s aperture
@@ -219,3 +228,6 @@ def main():
             'Exoatmospheric Irradiance", by Martin Taylor, Geoeye',
             source2="USGS via Digital Globe",
             history="ESD=%f; BAND_Esun=%f; SZA=%f" % (esd, esun, sza))
+
+if __name__ == '__main__':
+    sys.exit(main())
