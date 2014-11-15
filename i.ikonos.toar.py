@@ -122,6 +122,9 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 # librairies
 import os
 import sys
+sys.path.insert(1, os.path.join(os.path.dirname(sys.path[0]),
+                                'etc', 'i.ikonos.toar'))
+
 import atexit
 from datetime import datetime
 
@@ -257,16 +260,22 @@ def main():
         # Band dependent metadata for Spectral Radiance
         # -------------------------------------------------------------------
 
+        # Why is this necessary?  Any function to remove the mapsets name?
+        if '@' in band:
+            band_key = (band.split('@')[0])
+        else:
+            band_key = band
+
         # get coefficients
         if acq_dat < cc_update:
             g.message("\n|! Using Pre-2001 Calibration Coefficient values",
                       flags='i')
-            cc = float(CC[band][0])
+            cc = float(CC[band_key][0])
         else:
-            cc = float(CC[band][1])
+            cc = float(CC[band_key][1])
 
         # get bandwidth
-        bw = float(CC[band][2])
+        bw = float(CC[band_key][2])
 
         # inform
         msg = "   [Calibration Coefficient=%d, Bandwidth=%.1f]" \
@@ -305,7 +314,7 @@ def main():
             # ---------------------------------------------------------------
 
             # get esun
-            esun = CC[band][3]
+            esun = CC[band_key][3]
 
             # inform
             msg = "   [Earth-Sun distane=%f, Mean solar exoatmospheric " \
@@ -354,7 +363,7 @@ def main():
     if not keep_region:
         grass.del_temp_region()  # restoring previous region settings
     g.message("\n|! Region's resolution restored!")
-    g.message("\n>>> Rebalancing colors "
+    g.message("\n>>> Hint: rebalancing colors "
               "(i.colors.enhance) may improve appearance of RGB composites!",
               flags='i')
 
