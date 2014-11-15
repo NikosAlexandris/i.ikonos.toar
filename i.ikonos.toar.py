@@ -12,7 +12,7 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 
 
                 Spectral Radiance -------------------------------------------
-                
+
                     for spectral band λ at the sensor’s aperture in
                     watts / (meter squared * ster * µm)
 
@@ -158,15 +158,21 @@ cc_update = datetime(2001, 2, 22)
 
 spectral_bands = CC.keys()
 
+# string for metadata
+source1_rad = source1_toar = 'Martin Taylor, 2005. '
+'"IKONOS Planetary Reflectance and Mean Solar Exoatmospheric Irradiance".'
+source2_rad = source2_toar = ""  # Add some source2?
+
 
 # helper functions ----------------------------------------------------------
 def cleanup():
+    """Clean up temporary files"""
     grass.run_command('g.remove', flags='f', type="rast",
                       pattern='tmp.%s*' % os.getpid(), quiet=True)
 
 
 def run(cmd, **kwargs):
-    """ """
+    """Help function executing grass commands with 'quiet=True'"""
     grass.run_command(cmd, quiet=True, **kwargs)
 
 
@@ -233,25 +239,11 @@ def main():
 
         global tmp_rad
 
-        g.message("|* Processing the %s spectral band" % band)
+        g.message("|* Processing the %s spectral band" % band, flags='i')
 
         if not keep_region:
             g.message("\n|! Matching region to %s" % band)  # set region
             run('g.region', rast=band)   # ## FixMe
-
-        # -----------------------------------------------------------------------
-        # Band dependent metadata for Spectral Radiance
-        # -----------------------------------------------------------------------
-
-        # Calibration Coefficients
-        if acq_dat < cc_update:
-            g.message("\n|! Using Pre-2001 Calibration Coefficient values")
-            cc = float(CC[band][0])
-        else:
-            cc = float(CC[band][1])
-
-        # Effective bandwidth
-        bw = float(CC[band][2])
 
         # -------------------------------------------------------------------
         # Converting to Spectral Radiance
@@ -260,83 +252,103 @@ def main():
         msg = "\n|> Converting to Spectral Radiance: " \
 #            "L(λ) = 10^4 x DN(λ) / CalCoef(λ) x Bandwidth(λ)"  # Unicode? ##
         g.message(msg)
-        
+
+        # -------------------------------------------------------------------
+        # Band dependent metadata for Spectral Radiance
+        # -------------------------------------------------------------------
+
+        # get coefficients
+        if acq_dat < cc_update:
+            g.message("\n|! Using Pre-2001 Calibration Coefficient values",
+                      flags='i')
+            cc = float(CC[band][0])
+        else:
+            cc = float(CC[band][1])
+
+        # get bandwidth
+        bw = float(CC[band][2])
+
+        # inform
         msg = "   [Calibration Coefficient=%d, Bandwidth=%.1f]" \
             % (cc, bw)
         g.message(msg)
 
+        # convert
         tmp_rad = "%s.Radiance" % tmp  # Temporary Map
-
         rad = "%s = 10^4 * %s / %f * %f" \
             % (tmp_rad, band, cc, bw)
         grass.mapcalc(rad)
 
-        history_rad = rad  # track command
-
-        units = "W / m2 / μm / ster"
-        description = "At-sensor %s band spectral Radiance (W/m2/μm/sr)" % band
-        source1 = '"IKONOS Planetary Reflectance and '
-        'Mean Solar Exoatmospheric Irradiance", by Martin Taylor, Geoeye'
+        # string for metadata
+        history_rad = rad
         history_rad += "Calibration Coefficient=%d; Effective Bandwidth=%.1f" \
             % (cc, bw)
-
-        # -------------------------------------------------------------------
-        # Converting to Top-of-Atmosphere Reflectance
-        # -------------------------------------------------------------------
+        title_rad = "%s band (Spectral Radiance)" % band
+        units_rad = "W / m2 / μm / ster"
+        description_rad = "At-sensor %s band spectral Radiance (W/m2/μm/sr)" \
+            % band
 
         if not radiance:
 
+            # -------------------------------------------------------------------
+            # Converting to Top-of-Atmosphere Reflectance
+            # -------------------------------------------------------------------
+
             global tmp_toar
+
             msg = "\n|> Converting to Top-of-Atmosphere Reflectance" \
 #            "ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))"  # Unicode? ######
             g.message(msg)
 
-            esun = CC[band][3]  # Mean solar exoatmospheric irradiance
+            # ---------------------------------------------------------------
+            # Band dependent metadata for Spectral Radiance
+            # ---------------------------------------------------------------
 
-            msg = "   [Earth-Sun distane=%f, Mean Band Irradiance=%.1f]" \
-                % (esd, esun)
+            # get esun
+            esun = CC[band][3]
+
+            # inform
+            msg = "   [Earth-Sun distane=%f, Mean solar exoatmospheric " \
+                "irradiance=%.1f]" % (esd, esun)
             g.message(msg)
 
+            # convert
             tmp_toar = "%s.Reflectance" % tmp  # Spectral Reflectance
-            toar = "%s = %f * %s * %f^2 / %.1f * cos(%f)" \
+            toar = "%s = %f * %s * %f^2 / %f * cos(%f)" \
                 % (tmp_toar, math.pi, tmp_rad, esd, esun, sza)
             grass.mapcalc(toar)
 
-            history_toar = toar  # track command
-
             # strings for output's metadata
-            title = "echo ${BAND} band (Top of Atmosphere Reflectance)"
-            units = "Unitless planetary reflectance"
-            description = "Top of Atmosphere `echo ${BAND}` band spectral "
-            "Reflectance (unitless)"
-            source1 = '"IKONOS Planetary Reflectance and Mean Solar '
-            'Exoatmospheric Irradiance", by Martin Taylor, Geoeye'
-            source2 = "USGS via Digital Globe"
+            history_toar = toar
             history_toar += "ESD=%f; BAND_Esun=%f; SZA=%f" % (esd, esun, sza)
+            title_toar = "%s band (Top of Atmosphere Reflectance)" % band
+            units_toar = "Unitless planetary reflectance"
+            description_toar = "Top of Atmosphere `echo ${BAND}` band spectral"
+            " Reflectance (unitless)"
 
     if tmp_toar:
+
         # history entry
-        run("r.support",
-            map=tmp_toar, title=title, units=units, description=description,
-            source1=source1, source2=source2, history=history_toar)
+        run("r.support", map=tmp_toar,
+            title=title_toar, units=units_toar, description=description_toar,
+            source1=source1_toar, source2=source2_toar, history=history_toar)
 
         # add suffix to basename & rename end product
-        toar_name = ("%s.%s" % (tmp_toar.split('@')[0], outputsuffix))
-        band_basename = grass.basename(tmp_toar)
-        print band_basename
+#        toar_name = ("%s.%s" % (band, outputsuffix))
+        toar_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
         run("g.rename", rast=(tmp_toar, toar_name))
 
     elif tmp_rad:
+
+        # history entry
         run("r.support", map=tmp_rad,
+            title=title_rad, units=units_rad, description=description_rad,
+            source1=source1_rad, source2=source2_rad, history=history_rad)
 
-            history=history_rad)
-
-#        # history entry
-#        run("r.support", map=tmp_rad, history)
-
-        # add suffix to basename & rename end product
-#        msx_nam = ("%s.%s" % (msx.split('@')[0], outputsuffix))
-        run("g.rename", rast=(tmp_rad, "Rad"))
+        # add suffix to basename & rename end product        
+#        rad_name = ("%s.%s" % (band, outputsuffix))
+        rad_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
+        run("g.rename", rast=(tmp_rad, rad_name))
 
     # visualising-related information
     if not keep_region:
