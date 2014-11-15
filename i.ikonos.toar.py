@@ -10,11 +10,12 @@ AUTHOR(S):      Nikos Alexandris <nik@nikosalexandris.net>
 
 PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 
-                Spectral Radiance for spectral band λ at the sensor’s aperture
+                Spectral Radiance
+                
+                    for spectral band λ at the sensor’s aperture in
+                    watts / (meter squared * ster * µm)
 
                     L(λ) = 10^4 x DN(λ) / CalCoef(λ) x Bandwidth(λ)    (1)
-
-                in: watts / (meter squared * ster * µm)
 
                 where:
                 - CalCoef_λ = Radiometric calibration coefficient [DN/(mW/cm 2- sr)]
