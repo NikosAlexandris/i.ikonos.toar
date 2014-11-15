@@ -10,7 +10,8 @@ AUTHOR(S):      Nikos Alexandris <nik@nikosalexandris.net>
 
 PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 
-                Spectral Radiance
+
+                Spectral Radiance -------------------------------------------
                 
                     for spectral band λ at the sensor’s aperture in
                     watts / (meter squared * ster * µm)
@@ -27,14 +28,8 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
                 - W·sr−1·m−2 | "The SI unit of radiance is watts per steradian
                 per square metre" <http://en.wikipedia.org/wiki/Radiance>
 
-                Sources:
 
-                - "IKONOS Planetary Reflectance and Mean Solar
-                Exoatmospheric Irradiance", by Martin Taylor, Geoeye.
-                - <http://landsat.usgs.gov/how_is_radiance_calculated.php>
-
-
-                Planetary Reflectance
+                Planetary Reflectance ---------------------------------------
 
                     ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))
 
@@ -45,13 +40,20 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
                 - d: Earth-Sun distance in astronomical units [calculated using
                 AcquisitionTime class]
 
+
+                Sources -----------------------------------------------------
+
+                - "IKONOS Planetary Reflectance and Mean Solar
+                Exoatmospheric Irradiance", by Martin Taylor, Geoeye.
+                - <http://landsat.usgs.gov/how_is_radiance_calculated.php>
+
+
  COPYRIGHT:    (C) 2014 by the GRASS Development Team
 
                This program is free software under the GNU General Public
                License (>=v2). Read the file COPYING that comes with GRASS
                for details.
 """
-
 
 #%Module
 #%  description: Converting IKONOS digital numbers (radiometrically corrected) to Top-of-Atmosphere Spectral Radiance or Reflectance  (Krause, 2005)
