@@ -199,11 +199,12 @@ def main():
     utc = options['utc']
     doy = options['doy']
     sea = options['sea']
+
     radiance = flags['r']
     keep_region = flags['k']
 
-    mapset = grass.gisenv()['MAPSET']  # Current Mapset?
-    imglst = [spectral_bands]
+#    mapset = grass.gisenv()['MAPSET']  # Current Mapset?
+#    imglst = [spectral_bands]
 #    images = {}
 #    for img in imglst:  # Retrieving Image Info
 #        images[img] = Info(img, mapset)
@@ -289,7 +290,7 @@ def main():
         tmp_rad = "%s.Radiance" % tmp  # Temporary Map
         rad = "%s = 10^4 * %s / %f * %f" \
             % (tmp_rad, band, cc, bw)
-        grass.mapcalc(rad)
+        grass.mapcalc(rad, overwrite=True)
 
         # string for metadata
         history_rad = rad
@@ -328,7 +329,7 @@ def main():
             tmp_toar = "%s.Reflectance" % tmp  # Spectral Reflectance
             toar = "%s = %f * %s * %f^2 / %f * cos(%f)" \
                 % (tmp_toar, math.pi, tmp_rad, esd, esun, sza)
-            grass.mapcalc(toar)
+            grass.mapcalc(toar, overwrite=True)
 
             # strings for output's metadata
             history_toar = toar
@@ -339,26 +340,25 @@ def main():
             " Reflectance (unitless)"
 
         if tmp_toar:
-    
+
             # history entry
-            run("r.support", map=tmp_toar,
-                title=title_toar, units=units_toar, description=description_toar,
-                source1=source1_toar, source2=source2_toar, history=history_toar)
-    
+            run("r.support", map=tmp_toar, title=title_toar,
+                units=units_toar, description=description_toar,
+                source1=source1_toar, source2=source2_toar,
+                history=history_toar)
+
             # add suffix to basename & rename end product
-    #        toar_name = ("%s.%s" % (band, outputsuffix))
             toar_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
             run("g.rename", rast=(tmp_toar, toar_name))
-    
+
         elif tmp_rad:
-    
+
             # history entry
             run("r.support", map=tmp_rad,
                 title=title_rad, units=units_rad, description=description_rad,
                 source1=source1_rad, source2=source2_rad, history=history_rad)
-    
+
             # add suffix to basename & rename end product
-    #        rad_name = ("%s.%s" % (band, outputsuffix))
             rad_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
             run("g.rename", rast=(tmp_rad, rad_name))
 
