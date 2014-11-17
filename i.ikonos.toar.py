@@ -134,6 +134,7 @@ from grass.pygrass.modules.shortcuts import general as g
 import math
 from utc_to_esd import AcquisitionTime, jd_to_esd
 
+
 # globals -------------------------------------------------------------------
 acq_tim = ''
 tmp = ''
@@ -145,11 +146,11 @@ tmp_toar = ''
 Band Parameters. Coefficients, updated on 2001-02-22, are for 11-bit products.
 Taylor, 2005.
 
-# IKONOS Band (λ)                           1st column
-# CalCoef(λ) Pre  2/22/01 (DN/(mW/cm2-sr))  2nd column
-# CalCoef(λ) Post 2/22/01 (DN/(mW/cm2-sr))  3rd column
-# Effective Bandwidthλ (nm)                 4th column
-# Esun(λ) (W/m2/μm)                         5th column
+# IKONOS Band (λ)                           1st column (dictionary keys)
+# CalCoef(λ) Pre  2/22/01 (DN/(mW/cm2-sr))  2nd column (1st in tuple)
+# CalCoef(λ) Post 2/22/01 (DN/(mW/cm2-sr))  3rd column (2nd in tuple)
+# Effective Bandwidthλ (nm)                 4th column (3rd in tuple)
+# Esun(λ) (W/m2/μm)                         5th column (4th in tuple)
 """
 CC = {'Pan':   (161, 161, 403.0, 1375.8),  # Note: Pan is "TDI-13"
       'Blue':  (633, 728, 071.3, 1930.9),
@@ -215,10 +216,10 @@ def main():
     if not keep_region:
         grass.use_temp_region()  # to safely modify the region
     tmpfile = grass.tempfile()  # Temporary file - replace with os.getpid?
-    tmp = "tmp." + grass.basename(tmpfile)  # use its basenam
+    tmp = "tmp." + grass.basename(tmpfile)  # use its basename
 
     # -----------------------------------------------------------------------
-    # Global Metadata
+    # Global Metadata: Earth-Sun distance, Sun Zenith Angle
     # -----------------------------------------------------------------------
 
     acq_utc = AcquisitionTime(utc)  # will hold esd (earth-sun distance)
@@ -237,7 +238,9 @@ def main():
 
     sza = 90 - float(sea)  # Sun Zenith Angle based on Sun Elevation Angle
 
-    # loop over all bands
+    # -----------------------------------------------------------------------
+    # Loop processing over all bands
+    # -----------------------------------------------------------------------
     for band in spectral_bands:
 
         global tmp_rad
@@ -299,9 +302,9 @@ def main():
 
         if not radiance:
 
-            # -------------------------------------------------------------------
+            # ---------------------------------------------------------------
             # Converting to Top-of-Atmosphere Reflectance
-            # -------------------------------------------------------------------
+            # ---------------------------------------------------------------
 
             global tmp_toar
 
@@ -335,29 +338,29 @@ def main():
             description_toar = "Top of Atmosphere `echo ${BAND}` band spectral"
             " Reflectance (unitless)"
 
-    if tmp_toar:
-
-        # history entry
-        run("r.support", map=tmp_toar,
-            title=title_toar, units=units_toar, description=description_toar,
-            source1=source1_toar, source2=source2_toar, history=history_toar)
-
-        # add suffix to basename & rename end product
-#        toar_name = ("%s.%s" % (band, outputsuffix))
-        toar_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
-        run("g.rename", rast=(tmp_toar, toar_name))
-
-    elif tmp_rad:
-
-        # history entry
-        run("r.support", map=tmp_rad,
-            title=title_rad, units=units_rad, description=description_rad,
-            source1=source1_rad, source2=source2_rad, history=history_rad)
-
-        # add suffix to basename & rename end product        
-#        rad_name = ("%s.%s" % (band, outputsuffix))
-        rad_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
-        run("g.rename", rast=(tmp_rad, rad_name))
+        if tmp_toar:
+    
+            # history entry
+            run("r.support", map=tmp_toar,
+                title=title_toar, units=units_toar, description=description_toar,
+                source1=source1_toar, source2=source2_toar, history=history_toar)
+    
+            # add suffix to basename & rename end product
+    #        toar_name = ("%s.%s" % (band, outputsuffix))
+            toar_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
+            run("g.rename", rast=(tmp_toar, toar_name))
+    
+        elif tmp_rad:
+    
+            # history entry
+            run("r.support", map=tmp_rad,
+                title=title_rad, units=units_rad, description=description_rad,
+                source1=source1_rad, source2=source2_rad, history=history_rad)
+    
+            # add suffix to basename & rename end product
+    #        rad_name = ("%s.%s" % (band, outputsuffix))
+            rad_name = ("%s.%s" % (band.split('@')[0], outputsuffix))
+            run("g.rename", rast=(tmp_rad, rad_name))
 
     # visualising-related information
     if not keep_region:
