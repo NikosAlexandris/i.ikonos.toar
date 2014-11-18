@@ -95,7 +95,7 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 #% type: string
 #% description: Coordinated Universal Time
 #% guisection: Metadata
-#% required: yes
+#% required: no
 #%end
 
 #%option
@@ -223,14 +223,13 @@ def main():
     # Global Metadata: Earth-Sun distance, Sun Zenith Angle
     # -----------------------------------------------------------------------
 
-    acq_utc = AcquisitionTime(utc)  # will hold esd (earth-sun distance)
-    acq_dat = datetime(acq_utc.year, acq_utc.month, acq_utc.day)
-
     # Earth-Sun distance
     if doy:
         esd = jd_to_esd(int(doy))
 
     elif utc:
+        acq_utc = AcquisitionTime(utc)  # will hold esd (earth-sun distance)
+        acq_dat = datetime(acq_utc.year, acq_utc.month, acq_utc.day)
         esd = acq_utc.esd
 
     else:
