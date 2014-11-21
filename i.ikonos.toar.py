@@ -7,7 +7,6 @@ MODULE:         i.fusion.hpf
 AUTHOR(S):      Nikos Alexandris <nik@nikosalexandris.net>
                 Converted from a bash shell script | Trikala, November 2014
 
-
 PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 
 
@@ -19,7 +18,8 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
                     L(λ) = 10^4 x DN(λ) / CalCoef(λ) x Bandwidth(λ)    (1)
 
                 where:
-                - CalCoef_λ = Radiometric calibration coefficient [DN/(mW/cm 2- sr)]
+                - CalCoef_λ = Radiometric calibration coefficient
+                    [DN/(mW/cm 2- sr)]
                 - Bandwidth_λ = Bandwidth of spectral band λ (nm)
 
                 Alt. unit(s) notation:
@@ -45,6 +45,7 @@ PURPOSE:        Converting IKONOS DN values to Spectral Radiance or Reflectance
 
                 - "IKONOS Planetary Reflectance and Mean Solar
                 Exoatmospheric Irradiance", by Martin Taylor, Geoeye.
+
                 - <http://landsat.usgs.gov/how_is_radiance_calculated.php>
 
 
@@ -124,16 +125,14 @@ import os
 import sys
 sys.path.insert(1, os.path.join(os.path.dirname(sys.path[0]),
                                 'etc', 'i.ikonos.toar'))
-
 import atexit
-from datetime import datetime
 
 import grass.script as grass
 from grass.pygrass.modules.shortcuts import general as g
-#from grass.pygrass.raster.abstract import Info
+
 import math
 from utc_to_esd import AcquisitionTime, jd_to_esd
-
+from datetime import datetime
 
 # globals -------------------------------------------------------------------
 acq_tim = ''
@@ -309,7 +308,7 @@ def main():
             global tmp_toar
 
             msg = "\n|> Converting to Top-of-Atmosphere Reflectance" \
-#            "ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))"  # Unicode? ######
+                  # "ρ(p) = π x L(λ) x d^2 / ESUN(λ) x cos(θ(S))"  # Unicode?
             g.message(msg)
 
             # ---------------------------------------------------------------
